@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">Final_SMD</string>
+    <string-array name="video_length_options">
+        <item>3 seconds</item>
+        <item>5 seconds</item>
+        <item>10 seconds</item>
+        <item>15 seconds</item>
+        <item>30 seconds</item>
+    </string-array>
+
+    <string-array name="video_style_options">
+        <item>Realistic</item>
+        <item>Cartoon</item>
+        <item>Anime</item>
+        <item>3D Animation</item>
+        <item>Artistic</item>
+    </string-array>
+
+    <string-array name="video_quality_options">
+        <item>Low (faster)</item>
+        <item>Medium</item>
+        <item>High (slower)</item>
+    </string-array>
+
+    <string-array name="video_resolution_options">
+        <item>Original</item>
+        <item>1080p (1920x1080)</item>
+        <item>720p (1280x720)</item>
+        <item>480p (854x480)</item>
+        <item>360p (640x360)</item>
+    </string-array>
+
+</resources>

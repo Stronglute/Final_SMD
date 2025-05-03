@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Resolution options for the image generation -->
+    <string-array name="resolution_options">
+        <item>512x512</item>
+        <item>768x768</item>
+        <item>1024x1024</item>
+        <item>512x768</item>
+        <item>768x512</item>
+        <item>1024x768</item>
+        <item>768x1024</item>
+    </string-array>
+
+    <!-- Style options for the image generation -->
+    <string-array name="style_options">
+        <item>Realistic</item>
+        <item>Artistic</item>
+        <item>Cartoon</item>
+        <item>Anime</item>
+        <item>Digital Art</item>
+        <item>Oil Painting</item>
+        <item>Watercolor</item>
+        <item>Pencil Sketch</item>
+        <item>3D Render</item>
+        <item>Pixel Art</item>
+    </string-array>
+</resources>

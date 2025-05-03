@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="passwordEditText" type="id" />
+    <item name="signInButton" type="id" />
+    <item name="emailEditText" type="id" />
+    <item name="signUpButton" type="id" />
+    <item name="promptEditText" type="id" />
+    <item name="generateButton" type="id" />
+    <item name="generatedImageView" type="id" />
+    <item name="enhanceButton" type="id" />
+    <item name="refinedPromptTextView" type="id" />
+</resources>
