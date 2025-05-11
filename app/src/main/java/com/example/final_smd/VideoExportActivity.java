@@ -106,76 +106,61 @@ public class VideoExportActivity extends AppCompatActivity {
 
     private void exportVideo() {
         String filename = filenameInput.getText().toString().trim();
-        if (filename.isEmpty()) {
-            filenameInput.setError("Filename required");
-            return;
-        }
+        if (filename.isEmpty()) { filenameInput.setError("Filename required"); return; }
 
-        // Get selected format
-        String format;
-        if (radioMp4.isChecked()) {
-            format = "mp4";
-        } else if (radioGif.isChecked()) {
-            format = "gif";
-        } else {
-            format = "webm";
-        }
+        // pick format (you could transcode later; for now we just keep mp4)
+        String format = radioMp4.isChecked() ? "mp4"
+                : radioGif.isChecked() ? "gif"
+                : "webm";
 
-        // Get selected resolution
-        String resolution = resolutionSpinner.getSelectedItem().toString();
-
-        // Get selected quality
-        int quality = qualitySeekBar.getProgress();
-
-        // Show progress indicators
         progressBar.setVisibility(View.VISIBLE);
-        statusText.setText("Exporting video...");
+        statusText.setText("Exporting…");
         exportButton.setEnabled(false);
 
-        // Execute the export task in background
         executorService.execute(() -> {
             try {
-                // Simulate export process
-                simulateVideoExport();
-
-                // Create output file
-                File outputDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-                if (!outputDir.exists()) {
-                    outputDir.mkdirs();
+                // 1) decide destination
+                File moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                if (!moviesDir.exists() && !moviesDir.mkdirs()) {
+                    throw new Exception("Cannot access Movies folder");
                 }
+                File outFile = new File(moviesDir, filename + "." + format);
 
-                String outputFileName = filename + "." + format;
-                File outputFile = new File(outputDir, outputFileName);
+                // 2) copy bytes
+                copyUriToFile(videoUri, outFile);
 
-                // In a real app, you would perform the actual video conversion here
-                // using MediaCodec, FFmpeg, or other libraries
-
-                // For demonstration, we'll just copy the original file
-                // FileUtils.copyFile(new File(videoUri.getPath()), outputFile);
-
-                // Scan the file so it appears in the gallery
+                // 3) make it visible in gallery
                 MediaScannerConnection.scanFile(this,
-                        new String[]{outputFile.getAbsolutePath()},
-                        null,
-                        null);
+                        new String[]{outFile.getAbsolutePath()}, null, null);
 
-                // Update UI on main thread
                 runOnUiThread(() -> {
                     progressBar.setVisibility(View.GONE);
-                    statusText.setText("Video exported successfully to: " + outputFile.getAbsolutePath());
+                    statusText.setText("Saved to " + outFile.getAbsolutePath());
                     exportButton.setEnabled(true);
-
-                    // Show share option
-                    showShareOption(outputFile);
+                    showShareOption(outFile);
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     progressBar.setVisibility(View.GONE);
-                    statusText.setText("Error: " + e.getMessage());
+                    statusText.setText("Error: "+e.getMessage());
                     exportButton.setEnabled(true);
                 });
             }
         });
+    }
+
+    /** Copies whatever the Uri points to (http/content/file) into destFile. */
+    private void copyUriToFile(Uri srcUri, File destFile) throws Exception {
+        try (java.io.InputStream in =
+                     ("http".equals(srcUri.getScheme()) || "https".equals(srcUri.getScheme()))
+                             ? new java.net.URL(srcUri.toString()).openStream()
+                             : getContentResolver().openInputStream(srcUri);
+             java.io.OutputStream out = new java.io.FileOutputStream(destFile)) {
+
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = in.read(buf)) != -1) { out.write(buf, 0, len); }
+        }
     }
 
     private void simulateVideoExport() throws InterruptedException {

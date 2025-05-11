@@ -16,5 +16,11 @@ public interface ApiService {
 
     @GET("image_task/{task_id}")
     Call<TaskStatusResponse> getTaskStatus(@Path("task_id") String taskId);
+
+    @POST("generate_video/")
+    Call<GenerateVideoResponse> generateVideo(@Body GenerateVideoRequest body);
+
+    @GET("video_task/{task_id}")
+    Call<VideoTaskStatusResponse> getVideoTaskStatus(@Path("task_id") String taskId);
 }
 
