@@ -29,5 +29,5 @@
         <item>480p (854x480)</item>
         <item>360p (640x360)</item>
     </string-array>
-
+    <string name="client_id">659994966440-g28glut4qsi7g7qhd2g44o4j1tq4ursp.apps.googleusercontent.com</string>
 </resources>

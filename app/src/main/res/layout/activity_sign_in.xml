@@ -22,7 +22,7 @@
         android:inputType="textPassword"
         android:layout_marginTop="16dp" />
 
-    <!-- Sign-in Button -->
+    <!-- Sign‑in button -->
     <Button
         android:id="@+id/signInButton"
         android:layout_width="match_parent"
@@ -30,10 +30,23 @@
         android:text="Sign In"
         android:layout_marginTop="16dp" />
 
+    <!-- ⬇️  NEW: Sign‑up link -->
+    <TextView
+        android:id="@+id/signUpTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Create new account?  Sign Up"
+        android:textColor="@color/colorPrimary"
+        android:textStyle="bold"
+        android:layout_marginTop="8dp"
+        android:clickable="true"
+        android:focusable="true" />
+
+    <!-- Google One‑tap / OAuth -->
     <com.google.android.gms.common.SignInButton
         android:id="@+id/sign_in_button"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp" />
 
 </LinearLayout>

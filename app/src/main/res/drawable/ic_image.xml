@@ -1,0 +1,23 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- outer square -->
+    <path
+        android:fillColor="#FF9E9E9E"
+        android:pathData="M19,3H5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2zM19,19H5V5h14v14z" />
+
+    <!-- mountains -->
+    <path
+        android:fillColor="#FF757575"
+        android:pathData="M8,14l2.5,3 3,-4 4.5,6H6z" />
+
+    <!-- sun: circle of radius 1.5 at (14.5,8.5) -->
+    <path
+        android:fillColor="#FF757575"
+        android:pathData="M14.5,7
+                          A1.5,1.5 0 1,0 14.5,10
+                          A1.5,1.5 0 1,0 14.5,7Z" />
+</vector>

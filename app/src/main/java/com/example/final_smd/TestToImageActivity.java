@@ -1,5 +1,6 @@
 package com.example.final_smd;
 
+import android.app.DownloadManager;
 import android.content.ContentValues;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -23,6 +24,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
+import com.example.final_smd.utilis.ApiService;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.textfield.TextInputEditText;
 
@@ -35,16 +37,22 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import com.bumptech.glide.Glide;
+import com.example.final_smd.utilis.*;   // ApiClient & ApiService
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
 
 public class TestToImageActivity extends AppCompatActivity {
+    private ApiService api;              // add field
+    private String generatedImageUrl;    // keep URL for download
 
     private TextInputEditText editTextPrompt;
     private Spinner spinnerResolution;
     private Spinner spinnerStyle;
     private SeekBar seekBarGuidanceScale;
     private TextView textGuidanceScaleValue;
-    private SeekBar seekBarSteps;
-    private TextView textStepsValue;
     private Button btnEnhancePrompt;
     private Button btnGenerateImage;
     private MaterialCardView cardImagePreview;
@@ -69,7 +77,7 @@ public class TestToImageActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_text_to_image);
-
+        api = ApiClient.get().create(ApiService.class);
         // Setup toolbar
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -90,8 +98,7 @@ public class TestToImageActivity extends AppCompatActivity {
         spinnerStyle = findViewById(R.id.spinner_style);
         seekBarGuidanceScale = findViewById(R.id.seekbar_guidance_scale);
         textGuidanceScaleValue = findViewById(R.id.text_guidance_scale_value);
-        seekBarSteps = findViewById(R.id.seekbar_steps);
-        textStepsValue = findViewById(R.id.text_steps_value);
+
         btnEnhancePrompt = findViewById(R.id.btn_enhance_prompt);
         btnGenerateImage = findViewById(R.id.btn_generate_image);
         cardImagePreview = findViewById(R.id.card_image_preview);
@@ -154,23 +161,6 @@ public class TestToImageActivity extends AppCompatActivity {
             public void onStopTrackingTouch(SeekBar seekBar) {
             }
         });
-
-        // Steps seek bar
-        seekBarSteps.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                steps = progress;
-                textStepsValue.setText(String.valueOf(steps));
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-            }
-        });
     }
 
     private void setupButtons() {
@@ -180,88 +170,160 @@ public class TestToImageActivity extends AppCompatActivity {
         btnSaveImage.setOnClickListener(v -> saveImage());
     }
 
-    private void enhancePrompt() {
-        // In a real app, this would communicate with the LLM API to enhance the prompt
-        // For demonstration, we'll just modify the prompt with a sample enhancement
-
-        String originalPrompt = editTextPrompt.getText() != null ?
-                editTextPrompt.getText().toString() : "";
-
-        if (originalPrompt.isEmpty()) {
-            Toast.makeText(this, "Please enter a prompt first", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        // Simulate prompt enhancement (in production, this would call your LLM API)
-        String enhancedPrompt = originalPrompt + ", cinematic lighting, highly detailed, 8k resolution, photorealistic, professional photography";
-        editTextPrompt.setText(enhancedPrompt);
-
-        Toast.makeText(this, "Prompt enhanced with details", Toast.LENGTH_SHORT).show();
+    private String getPromptText() {
+        return editTextPrompt.getText() == null ? "" : editTextPrompt.getText().toString();
     }
 
-    private void generateImage() {
-        String prompt = editTextPrompt.getText() != null ?
-                editTextPrompt.getText().toString() : "";
+    private void toast(String msg) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show(); }
 
-        if (prompt.isEmpty()) {
-            Toast.makeText(this, "Please enter a prompt first", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        // Show loading state
-        progressImageGeneration.setVisibility(View.VISIBLE);
+    private void showLoading(boolean loading) {
+        progressImageGeneration.setVisibility(loading ? View.VISIBLE : View.GONE);
         cardImagePreview.setVisibility(View.VISIBLE);
-        imagePreview.setVisibility(View.GONE);
-        btnRegenerate.setEnabled(false);
-        btnSaveImage.setEnabled(false);
-        btnGenerateImage.setEnabled(false);
+        imagePreview.setVisibility(loading ? View.GONE : View.VISIBLE);
+        btnGenerateImage.setEnabled(!loading);
+        btnRegenerate.setEnabled(!loading);
+        btnSaveImage.setEnabled(!loading && generatedImageUrl != null);
+    }
 
-        // Simulate API call with delay (in production, this would call your image generation API)
+    private int[] parseResolution(String res) {
+        // e.g. "1024x1024" → [1024,1024]
+        String[] parts = res.toLowerCase().split("x");
+        return new int[]{ Integer.parseInt(parts[0].trim()),
+                Integer.parseInt(parts[1].trim()) };
+    }
+
+    private void pollTask(String taskId) {
         executor.execute(() -> {
             try {
-                // Simulate network delay
-                Thread.sleep(3000);
+                while (true) {
+                    Response<TaskStatusResponse> r = api.getTaskStatus(taskId).execute();
 
-                // In a real app, this would be the result from the AI service
-                // For demo, we'll load a sample image from resources
-                generatedBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.sample_generated_image);
+                    if (!r.isSuccessful() || r.body() == null) {
+                        runOnUiThread(() -> {
+                            toast("Task check failed: " + r.code());
+                            showLoading(false);
+                        });
+                        return;
+                    }
 
-                // Update UI on main thread
+                    TaskStatusResponse body = r.body();
+
+                    // get status from whichever branch is present
+                    String status;
+                    if (body.data != null && body.data.status != null) {
+                        status = body.data.status.toLowerCase();
+                    } else {
+                        status = body.status.toLowerCase();
+                    }
+
+                    switch (status) {
+                        case "completed":
+                        case "success":
+                            generatedImageUrl = body.data.output.image_url;
+                            runOnUiThread(() -> loadImageIntoPreview(generatedImageUrl));
+                            return;
+
+                        case "failed":
+                        case "error":
+                            runOnUiThread(() -> {
+                                toast("Image generation failed");
+                                showLoading(false);
+                            });
+                            return;
+
+                        default:
+                            // pending / running – keep polling
+                            Thread.sleep(10000);
+                    }
+                }
+            } catch (Exception e) {
                 runOnUiThread(() -> {
-                    imagePreview.setImageBitmap(generatedBitmap);
-                    imagePreview.setVisibility(View.VISIBLE);
-                    progressImageGeneration.setVisibility(View.GONE);
-                    btnRegenerate.setEnabled(true);
-                    btnSaveImage.setEnabled(true);
-                    btnGenerateImage.setEnabled(true);
-
-                    Toast.makeText(TestToImageActivity.this,
-                            "Image generated successfully", Toast.LENGTH_SHORT).show();
-                });
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-                runOnUiThread(() -> {
-                    progressImageGeneration.setVisibility(View.GONE);
-                    btnGenerateImage.setEnabled(true);
-                    Toast.makeText(TestToImageActivity.this,
-                            "Error generating image", Toast.LENGTH_SHORT).show();
+                    toast("Polling error: " + e.getMessage());
+                    showLoading(false);
                 });
             }
         });
     }
 
-    private void saveImage() {
-        if (generatedBitmap == null) {
-            Toast.makeText(this, "No image to save", Toast.LENGTH_SHORT).show();
-            return;
+    private void loadImageIntoPreview(String url) {
+        Glide.with(this)
+                .load(url)
+                .placeholder(R.drawable.ic_image)  // optional
+                .into(imagePreview);
+
+        showLoading(false);
+        btnRegenerate.setEnabled(true);
+        btnSaveImage.setEnabled(true);
+        toast("Image ready!");
+    }
+
+    private void enhancePrompt() {
+        String original = getPromptText();
+        if (original.isEmpty()) {
+            toast("Please enter a prompt first"); return;
         }
 
-        // For Android 10 (API level 29) and above, use MediaStore
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            saveImageUsingMediaStore();
-        } else {
-            saveImageToExternalStorage();
-        }
+        String style = selectedStyle.equals("None") ? null : selectedStyle;
+
+        btnEnhancePrompt.setEnabled(false);
+
+        api.enhancePrompt(new PromptEnhanceRequest(original, style))
+                .enqueue(new Callback<PromptEnhanceResponse>() {
+                    @Override public void onResponse(Call<PromptEnhanceResponse> c,
+                                                     Response<PromptEnhanceResponse> r) {
+                        btnEnhancePrompt.setEnabled(true);
+                        if (r.isSuccessful() && r.body() != null) {
+                            editTextPrompt.setText(r.body().enhanced_prompt);
+                        } else {
+                            toast("Enhance failed: " + r.code());
+                        }
+                    }
+                    @Override public void onFailure(Call<PromptEnhanceResponse> c, Throwable t) {
+                        btnEnhancePrompt.setEnabled(true);
+                        toast("Network error: " + t.getMessage());
+                    }
+                });
+    }
+
+    private void generateImage() {
+        String prompt = getPromptText();
+        if (prompt.isEmpty()) { toast("Enter a prompt"); return; }
+
+        int[] wh = parseResolution(selectedResolution); // helper below
+        showLoading(true);
+
+        api.generateImage(new GenerateImageRequest(
+                        prompt, wh[0], wh[1], guidanceScale,
+                        selectedStyle.equals("None") ? null : selectedStyle))
+                .enqueue(new Callback<GenerateImageResponse>() {
+                    @Override public void onResponse(Call<GenerateImageResponse> c,
+                                                     Response<GenerateImageResponse> r) {
+                        if (r.isSuccessful() && r.body() != null) {
+                            pollTask(r.body().task_id);
+                        } else {
+                            toast("Generation start failed"); showLoading(false);
+                        }
+                    }
+                    @Override public void onFailure(Call<GenerateImageResponse> c, Throwable t) {
+                        toast("Network error: " + t.getMessage()); showLoading(false);
+                    }
+                });
+    }
+
+    private void saveImage() {
+        if (generatedImageUrl == null) { toast("Generate an image first"); return; }
+
+        // Use Android's DownloadManager (API >= 9) for simplicity
+        DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+        Uri uri = Uri.parse(generatedImageUrl);
+        DownloadManager.Request req = new DownloadManager.Request(uri);
+        req.setNotificationVisibility(
+                DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+        req.setDestinationInExternalPublicDir(
+                Environment.DIRECTORY_PICTURES, "AIGenApp/" + uri.getLastPathSegment());
+
+        dm.enqueue(req);
+        toast("Download started…");
     }
 
     private void saveImageUsingMediaStore() {

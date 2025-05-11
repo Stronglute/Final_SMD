@@ -22,11 +22,24 @@
         android:inputType="textPassword"
         android:layout_marginTop="16dp" />
 
-    <!-- Sign-up Button -->
+    <!-- Sign‑up button -->
     <Button
         android:id="@+id/signUpButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Sign Up"
         android:layout_marginTop="16dp" />
+
+    <!-- ⬇️  NEW: redirect to sign‑in -->
+    <TextView
+        android:id="@+id/signInTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Already have an account?  Sign In"
+        android:textColor="@color/colorPrimary"
+        android:textStyle="bold"
+        android:layout_marginTop="8dp"
+        android:clickable="true"
+        android:focusable="true" />
+
 </LinearLayout>
