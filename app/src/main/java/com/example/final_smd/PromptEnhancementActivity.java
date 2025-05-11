@@ -1,211 +1,185 @@
 package com.example.final_smd;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.Button;
-import android.widget.ProgressBar;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
-import android.widget.TextView;
-import android.widget.Toast;
-
+import android.widget.*;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
+import com.example.final_smd.utilis.*;                     // ApiClient / ApiService / DTOs
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.textfield.TextInputEditText;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class PromptEnhancementActivity extends AppCompatActivity {
 
+    // UI
     private TextInputEditText editTextOriginalPrompt;
     private TextInputEditText editTextEnhancedPrompt;
-    private RadioGroup radioGroupEnhancementType;
-    private RadioButton radioEnhanceDetail;
-    private RadioButton radioEnhanceStyle;
-    private RadioButton radioEnhanceTechnical;
-    private Button btnEnhance;
-    private Button btnRefineFurther;
-    private Button btnUsePrompt;
-    private MaterialCardView cardEnhancedPrompt;
-    private MaterialCardView cardEnhancementExplanation;
+    private RadioButton radioEnhanceDetail, radioEnhanceStyle, radioEnhanceTechnical;
+    private Button btnEnhance, btnRefineFurther, btnUsePrompt;
+    private MaterialCardView cardEnhancedPrompt, cardEnhancementExplanation;
     private TextView textEnhancementExplanation;
     private ProgressBar progressEnhancement;
 
-    // Enhancement types and their explanations
-    private final Map<String, String> enhancementExplanations = new HashMap<>();
+    // Retrofit
+    private ApiService api;
 
-    // Executor for background tasks
-    private final Executor executor = Executors.newSingleThreadExecutor();
+    // Explanation map
+    private final Map<String, String> explanationMap = new HashMap<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_prompt_enhancement);
 
-        // Setup toolbar
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        }
+        api = ApiClient.get().create(ApiService.class);
 
-        // Initialize explanations
+        setUpToolbar();
         initExplanations();
+        bindViews();
+        setupListeners();
+        importIncomingPrompt();
+    }
 
-        // Initialize UI components
-        initializeViews();
-        setupButtonListeners();
+    /* ───────────────────────────────── UI helpers ─────────────────────────── */
 
-        // Check if we have a prompt from another activity
-        checkForIncomingPrompt();
+    private void setUpToolbar() {
+        Toolbar tb = findViewById(R.id.toolbar);
+        setSupportActionBar(tb);
+        if (getSupportActionBar() != null) getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+    }
+
+    private void bindViews() {
+        editTextOriginalPrompt      = findViewById(R.id.edit_text_original_prompt);
+        editTextEnhancedPrompt      = findViewById(R.id.edit_text_enhanced_prompt);
+        radioEnhanceDetail          = findViewById(R.id.radio_enhance_detail);
+        radioEnhanceStyle           = findViewById(R.id.radio_enhance_style);
+        radioEnhanceTechnical       = findViewById(R.id.radio_enhance_technical);
+        btnEnhance                  = findViewById(R.id.btn_enhance);
+        btnRefineFurther            = findViewById(R.id.btn_refine_further);
+        btnUsePrompt                = findViewById(R.id.btn_use_prompt);
+        cardEnhancedPrompt          = findViewById(R.id.card_enhanced_prompt);
+        cardEnhancementExplanation  = findViewById(R.id.card_enhancement_explanation);
+        textEnhancementExplanation  = findViewById(R.id.text_enhancement_explanation);
+        progressEnhancement         = findViewById(R.id.progress_enhancement);
+    }
+
+    private void setupListeners() {
+        btnEnhance.setOnClickListener(v -> performEnhance());
+        btnRefineFurther.setOnClickListener(v -> refineFurther());
+        btnUsePrompt.setOnClickListener(v -> copyAndReturn());
     }
 
     private void initExplanations() {
-        enhancementExplanations.put("detail", "Added specific descriptive elements to make the " +
-                "output more precise and visually rich. Enhanced with details about lighting, " +
-                "perspective, and environmental context.");
-
-        enhancementExplanations.put("style", "Added stylistic elements to give the output a " +
-                "distinctive artistic quality. Incorporated terms that influence the aesthetic " +
-                "direction like art movement references, color palette suggestions, and mood indicators.");
-
-        enhancementExplanations.put("technical", "Added technical parameters that help the AI model " +
-                "produce higher quality results. These include resolution specifications, aspect " +
-                "ratio guidance, and quality enhancers like 'detailed,' 'high resolution,' and 'photorealistic'.");
+        explanationMap.put("detail",
+                "Added rich descriptive elements – lighting, perspective, environment.");
+        explanationMap.put("style",
+                "Injected stylistic cues: art‑movement references, palette, mood.");
+        explanationMap.put("technical",
+                "Added technical parameters for higher quality (resolution, sharp focus…).");
     }
 
-    private void initializeViews() {
-        editTextOriginalPrompt = findViewById(R.id.edit_text_original_prompt);
-        editTextEnhancedPrompt = findViewById(R.id.edit_text_enhanced_prompt);
-        radioGroupEnhancementType = findViewById(R.id.radio_group_enhancement_type);
-        radioEnhanceDetail = findViewById(R.id.radio_enhance_detail);
-        radioEnhanceStyle = findViewById(R.id.radio_enhance_style);
-        radioEnhanceTechnical = findViewById(R.id.radio_enhance_technical);
-        btnEnhance = findViewById(R.id.btn_enhance);
-        btnRefineFurther = findViewById(R.id.btn_refine_further);
-        btnUsePrompt = findViewById(R.id.btn_use_prompt);
-        cardEnhancedPrompt = findViewById(R.id.card_enhanced_prompt);
-        cardEnhancementExplanation = findViewById(R.id.card_enhancement_explanation);
-        textEnhancementExplanation = findViewById(R.id.text_enhancement_explanation);
-        progressEnhancement = findViewById(R.id.progress_enhancement);
-    }
-
-    private void setupButtonListeners() {
-        btnEnhance.setOnClickListener(v -> enhancePrompt());
-        btnRefineFurther.setOnClickListener(v -> refineFurther());
-        btnUsePrompt.setOnClickListener(v -> usePrompt());
-    }
-
-    private void checkForIncomingPrompt() {
-        Intent intent = getIntent();
-        if (intent != null && intent.hasExtra("prompt")) {
-            String incomingPrompt = intent.getStringExtra("prompt");
-            editTextOriginalPrompt.setText(incomingPrompt);
+    private void importIncomingPrompt() {
+        Intent in = getIntent();
+        if (in != null && in.hasExtra("prompt")) {
+            editTextOriginalPrompt.setText(in.getStringExtra("prompt"));
         }
     }
 
-    private void enhancePrompt() {
-        String originalPrompt = editTextOriginalPrompt.getText().toString().trim();
-        if (originalPrompt.isEmpty()) {
-            Toast.makeText(this, "Please enter a prompt to enhance", Toast.LENGTH_SHORT).show();
-            return;
-        }
+    /* ───────────────────────────────── Core actions ───────────────────────── */
 
-        // Show progress and hide results initially
-        progressEnhancement.setVisibility(View.VISIBLE);
-        cardEnhancedPrompt.setVisibility(View.GONE);
-        cardEnhancementExplanation.setVisibility(View.GONE);
+    private void performEnhance() {
+        String prompt = editTextOriginalPrompt.getText().toString().trim();
+        if (prompt.isEmpty()) { toast("Please enter a prompt first"); return; }
 
-        // Determine enhancement type
-        String enhancementType;
-        if (radioEnhanceStyle.isChecked()) {
-            enhancementType = "style";
-        } else if (radioEnhanceTechnical.isChecked()) {
-            enhancementType = "technical";
-        } else {
-            enhancementType = "detail";
-        }
+        // Which enhancement type?
+        String type = radioEnhanceStyle.isChecked()   ? "style"
+                : radioEnhanceTechnical.isChecked()? "technical"
+                : "detail";
 
-        // Simulate enhancement in background thread
-        executor.execute(() -> {
-            // Simulate API call delay
-            try {
-                Thread.sleep(1500);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+        // UI: loading state
+        setLoading(true);
+
+        // Build request
+        PromptEnhanceRequest body = new PromptEnhanceRequest(prompt, null); // style=null
+        api.enhancePrompt(body).enqueue(new Callback<PromptEnhanceResponse>() {
+            @Override public void onResponse(Call<PromptEnhanceResponse> c,
+                                             Response<PromptEnhanceResponse> r) {
+                setLoading(false);
+                if (r.isSuccessful() && r.body() != null) {
+                    showResult(r.body().enhanced_prompt, explanationMap.get(type));
+                } else {
+                    toast("Enhancement failed (" + r.code() + ")");
+                }
             }
-
-            // Generate enhanced prompt (in a real app, this would come from an API)
-            String enhancedPrompt = generateEnhancedPrompt(originalPrompt, enhancementType);
-            String explanation = enhancementExplanations.get(enhancementType);
-
-            // Update UI on main thread
-            runOnUiThread(() -> {
-                progressEnhancement.setVisibility(View.GONE);
-                editTextEnhancedPrompt.setText(enhancedPrompt);
-                textEnhancementExplanation.setText(explanation);
-                cardEnhancedPrompt.setVisibility(View.VISIBLE);
-                cardEnhancementExplanation.setVisibility(View.VISIBLE);
-            });
+            @Override public void onFailure(Call<PromptEnhanceResponse> c, Throwable t) {
+                setLoading(false);
+                toast("Network error: " + t.getMessage());
+            }
         });
     }
 
-    private String generateEnhancedPrompt(String originalPrompt, String enhancementType) {
-        // In a real app, this would call an API. Here we simulate enhancement
-        switch (enhancementType) {
-            case "detail":
-                return originalPrompt + ", highly detailed, intricate, cinematic lighting, ultra HD, 8K resolution";
-            case "style":
-                return originalPrompt + ", in the style of Van Gogh, vibrant colors, expressive brush strokes";
-            case "technical":
-                return originalPrompt + ", 4K resolution, professional photography, sharp focus, studio lighting";
-            default:
-                return originalPrompt + ", enhanced with additional details and clarity";
-        }
-    }
-
     private void refineFurther() {
-        String currentEnhancedPrompt = editTextEnhancedPrompt.getText().toString().trim();
-        if (currentEnhancedPrompt.isEmpty()) {
-            Toast.makeText(this, "No enhanced prompt to refine", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        // Use the enhanced prompt as the new original
-        editTextOriginalPrompt.setText(currentEnhancedPrompt);
-        editTextEnhancedPrompt.setText("");
+        String current = editTextEnhancedPrompt.getText().toString().trim();
+        if (current.isEmpty()) { toast("No enhanced prompt to refine"); return; }
+        // Move enhanced → original for another round
+        editTextOriginalPrompt.setText(current);
         cardEnhancedPrompt.setVisibility(View.GONE);
         cardEnhancementExplanation.setVisibility(View.GONE);
+        editTextEnhancedPrompt.setText("");
     }
 
-    private void usePrompt() {
-        String enhancedPrompt = editTextEnhancedPrompt.getText().toString().trim();
-        if (enhancedPrompt.isEmpty()) {
-            Toast.makeText(this, "No enhanced prompt to use", Toast.LENGTH_SHORT).show();
-            return;
-        }
+    private void copyAndReturn() {
+        String enhanced = editTextEnhancedPrompt.getText().toString().trim();
+        if (enhanced.isEmpty()) { toast("Nothing to copy"); return; }
 
-        // Return the enhanced prompt to the calling activity
-        Intent resultIntent = new Intent();
-        resultIntent.putExtra("enhanced_prompt", enhancedPrompt);
-        setResult(RESULT_OK, resultIntent);
+        // copy to clipboard
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(ClipData.newPlainText("enhanced_prompt", enhanced));
+        toast("Copied to clipboard");
+
+        // also return to caller
+        Intent out = new Intent();
+        out.putExtra("enhanced_prompt", enhanced);
+        setResult(RESULT_OK, out);
         finish();
     }
 
-    @Override
-    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        if (item.getItemId() == android.R.id.home) {
-            onBackPressed();
-            return true;
-        }
+    /* ───────────────────────────────── UI helpers ─────────────────────────── */
+
+    private void setLoading(boolean on) {
+        progressEnhancement.setVisibility(on ? View.VISIBLE : View.GONE);
+        btnEnhance.setEnabled(!on);
+    }
+
+    private void showResult(String prompt, String explanation) {
+        editTextEnhancedPrompt.setText(prompt);
+        textEnhancementExplanation.setText(explanation != null ? explanation : "");
+        cardEnhancedPrompt.setVisibility(View.VISIBLE);
+        cardEnhancementExplanation.setVisibility(View.VISIBLE);
+    }
+
+    private void toast(String msg) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    /* ───────────────────────────────── Toolbar back ───────────────────────── */
+
+    @Override public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == android.R.id.home) { onBackPressed(); return true; }
         return super.onOptionsItemSelected(item);
     }
 }
