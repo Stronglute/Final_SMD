@@ -35,7 +35,6 @@ public class ScriptGeneratorFragment extends Fragment {
     private Button generateScriptButton;
     private MaterialCardView scriptOutputCardView;
     private TextView generatedScriptTextView;
-    private Button editScriptButton;
     private Button copyScriptButton;
     private Button convertToSpeechButton;
     private ProgressBar scriptProgressBar;
@@ -61,7 +60,6 @@ public class ScriptGeneratorFragment extends Fragment {
         generateScriptButton = view.findViewById(R.id.generateScriptButton);
         scriptOutputCardView = view.findViewById(R.id.scriptOutputCardView);
         generatedScriptTextView = view.findViewById(R.id.generatedScriptTextView);
-        editScriptButton = view.findViewById(R.id.editScriptButton);
         copyScriptButton = view.findViewById(R.id.copyScriptButton);
         convertToSpeechButton = view.findViewById(R.id.convertToSpeechButton);
         scriptProgressBar = view.findViewById(R.id.scriptProgressBar);
@@ -89,11 +87,6 @@ public class ScriptGeneratorFragment extends Fragment {
             }
         });
 
-        editScriptButton.setOnClickListener(v -> {
-            // Make the script text editable
-            generatedScriptTextView.setEnabled(true);
-            Toast.makeText(requireContext(), "You can now edit the script", Toast.LENGTH_SHORT).show();
-        });
 
         copyScriptButton.setOnClickListener(v -> {
             String scriptText = generatedScriptTextView.getText().toString();

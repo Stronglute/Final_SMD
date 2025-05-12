@@ -145,14 +145,6 @@
                     android:orientation="horizontal">
 
                     <Button
-                        android:id="@+id/editScriptButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="4dp"
-                        android:layout_weight="1"
-                        android:text="Edit" />
-
-                    <Button
                         android:id="@+id/copyScriptButton"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"

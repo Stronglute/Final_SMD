@@ -34,9 +34,6 @@ import java.util.concurrent.Executors;
 
 public class CaptionGeneratorFragment extends Fragment {
 
-    private Button uploadVideoButton;
-    private Button recordAudioButton;
-    private TextView selectedFileTextView;
     private TextInputEditText transcriptEditText;
     private AutoCompleteTextView formatAutoCompleteTextView;
     private CheckBox timestampCheckBox, emojiCheckBox;
@@ -62,10 +59,6 @@ public class CaptionGeneratorFragment extends Fragment {
     public void onViewCreated(@NonNull View view,
                               @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-
-        uploadVideoButton           = view.findViewById(R.id.uploadVideoButton);
-        recordAudioButton           = view.findViewById(R.id.recordAudioButton);
-        selectedFileTextView        = view.findViewById(R.id.selectedFileTextView);
         transcriptEditText          = view.findViewById(R.id.transcriptEditText);
         formatAutoCompleteTextView  = view.findViewById(R.id.formatAutoCompleteTextView);
         timestampCheckBox           = view.findViewById(R.id.timestampCheckBox);
@@ -99,17 +92,7 @@ public class CaptionGeneratorFragment extends Fragment {
     }
 
     private void setupButtons() {
-        uploadVideoButton.setOnClickListener(v ->
-                Toast.makeText(requireContext(),
-                        "Upload Video feature not implemented yet",
-                        Toast.LENGTH_SHORT).show()
-        );
 
-        recordAudioButton.setOnClickListener(v ->
-                Toast.makeText(requireContext(),
-                        "Record Audio feature not implemented yet",
-                        Toast.LENGTH_SHORT).show()
-        );
 
         generateCaptionsButton.setOnClickListener(v -> {
             if (validateInputs()) {

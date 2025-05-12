@@ -307,5 +307,8 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
         android:contentDescription="Create new project"
-        app:srcCompat="@android:drawable/ic_input_add" />
+        app:srcCompat="@android:drawable/ic_input_add"
+        android:text="Logout"
+        app:icon="@null"
+        />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

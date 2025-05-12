@@ -10,7 +10,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.cardview.widget.CardView;
 
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.firebase.auth.FirebaseAuth;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
@@ -19,11 +23,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Button btnTextToImage, btnPromptEnhancement, btnTextToVideo,
             btnVideoConversion, btnVideoInterpolation, btnTextToSpeech, btnScriptGeneration;
     private FloatingActionButton fabCreateNew;
+    private GoogleSignInClient mGoogleSignInClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(
+                GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(getString(R.string.default_web_client_id))
+                .requestEmail()
+                .build();
+        mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
 
         // Setup toolbar
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -140,9 +151,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void showNewProjectOptions() {
-        // This could be implemented with a BottomSheetDialog or AlertDialog
-        // to let the user choose which type of project to create
-        Toast.makeText(this, "Choose a project type to create", Toast.LENGTH_SHORT).show();
-        // Implementation would go here
+        // 1) Firebase sign-out
+        FirebaseAuth.getInstance().signOut();
+        // 2) Google sign-out (now mGoogleSignInClient is non-null)
+        mGoogleSignInClient.signOut();
+
+        // 3) Clear preferences & return to sign-in
+        getSharedPreferences("UserPrefs", MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply();
+
+        startActivity(new Intent(this, SignInActivity.class));
+        finish();
     }
 }

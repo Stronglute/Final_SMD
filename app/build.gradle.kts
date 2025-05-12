@@ -64,4 +64,7 @@ dependencies {
     implementation(libs.logging.interceptor)
     implementation(libs.glide)
     annotationProcessor(libs.compiler)
+    implementation (libs.firebase.auth.v2110)
+    implementation(libs.play.services.auth)
+
 }
