@@ -28,6 +28,15 @@
             android:orientation="vertical"
             android:padding="16dp">
 
+            <Button
+                android:id="@+id/btn_upload"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Upload" />
+
+
+
             <FrameLayout
                 android:id="@+id/video_container"
                 android:layout_width="match_parent"
@@ -39,6 +48,14 @@
                     android:id="@+id/video_preview"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent" />
+                <SeekBar
+                    android:id="@+id/seekbar_timeline"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom"
+                    android:max="100"
+                    android:progress="0"/>
+
             </FrameLayout>
 
             <LinearLayout

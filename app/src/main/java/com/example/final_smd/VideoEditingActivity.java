@@ -1,413 +1,282 @@
 package com.example.final_smd;
 
+import static android.content.Intent.getIntent;
+
+import android.content.Context;
 import android.content.Intent;
-import android.media.MediaPlayer;
+import android.widget.MediaController;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
-import android.widget.Button;
-import android.widget.ProgressBar;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
-import android.widget.SeekBar;
-import android.widget.TextView;
-import android.widget.Toast;
-import android.widget.VideoView;
-
+import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
+//import androidx.media3.session.MediaController;
 
-import java.io.File;
+import java.io.*;
+import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class VideoEditingActivity extends AppCompatActivity {
+    private static final int REQ_PICK_VIDEO = 1001;
 
+    /* ── UI references (unchanged IDs; one extra seek bar) ─────────────── */
     private VideoView videoPreview;
+    private SeekBar timelineSeek;
     private Button playPauseButton, resetButton, applyFpsButton,
             applyInterpolationButton, applyAdjustmentsButton,
             saveButton, exportButton;
     private SeekBar fpsSeekBar, smoothnessSeekBar, brightnessSeekBar,
             contrastSeekBar, saturationSeekBar;
     private TextView fpsValueText, smoothnessValueText, statusText;
-    private RadioGroup interpolationRadioGroup;
     private RadioButton linearRadio, opticalFlowRadio, aiRadio;
     private ProgressBar progressBar;
-    private Uri videoUri;
+
+    /* ── state ─────────────────────────────────────────────────────────── */
+    private Uri originalVideoUri;
     private Uri editedVideoUri;
     private boolean isPlaying = false;
-    private ExecutorService executorService;
+    private ExecutorService executor = Executors.newSingleThreadExecutor();
+    private Handler ui = new Handler(Looper.getMainLooper());
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    /* ------------------- onCreate ------------------------------------------------ */
+
+    @Override protected void onCreate(Bundle saved) {
+        super.onCreate(saved);
         setContentView(R.layout.activity_video_editing);
 
-        // Initialize UI components
-        videoPreview = findViewById(R.id.video_preview);
-        playPauseButton = findViewById(R.id.btn_play_pause);
-        resetButton = findViewById(R.id.btn_reset);
-        applyFpsButton = findViewById(R.id.btn_apply_fps);
-        applyInterpolationButton = findViewById(R.id.btn_apply_interpolation);
-        applyAdjustmentsButton = findViewById(R.id.btn_apply_adjustments);
-        saveButton = findViewById(R.id.btn_save);
-        exportButton = findViewById(R.id.btn_export);
 
-        fpsSeekBar = findViewById(R.id.seekbar_fps);
-        smoothnessSeekBar = findViewById(R.id.seekbar_smoothness);
-        brightnessSeekBar = findViewById(R.id.seekbar_brightness);
-        contrastSeekBar = findViewById(R.id.seekbar_contrast);
-        saturationSeekBar = findViewById(R.id.seekbar_saturation);
 
-        fpsValueText = findViewById(R.id.text_fps_value);
-        smoothnessValueText = findViewById(R.id.text_smoothness_value);
-        statusText = findViewById(R.id.text_status);
 
-        interpolationRadioGroup = findViewById(R.id.interpolation_radio_group);
-        linearRadio = findViewById(R.id.radio_linear);
-        opticalFlowRadio = findViewById(R.id.radio_optical_flow);
-        aiRadio = findViewById(R.id.radio_ai);
-
-        progressBar = findViewById(R.id.progress_bar);
-
-        // Create thread pool for background tasks
-        executorService = Executors.newSingleThreadExecutor();
-
-        // Get video URI from intent
-        String videoUriString = getIntent().getStringExtra("VIDEO_URI");
-        if (videoUriString != null) {
-            videoUri = Uri.parse(videoUriString);
-            editedVideoUri = videoUri; // Initially the same
+        bindViews();
+        setupTimelineSeek();
+        String uriStr = getIntent().getStringExtra("VIDEO_URI");
+        if (uriStr != null) {
+            originalVideoUri = Uri.parse(uriStr);
+            editedVideoUri   = originalVideoUri;
             setupVideoPreview();
         } else {
-            Toast.makeText(this, "No video to edit", Toast.LENGTH_SHORT).show();
-            finish();
-            return;
+            // No URI → prompt the user to pick one
+            pickVideoFromGallery();
         }
 
-        // Setup seek bars
+        setupVideoPreview();
         setupSeekBars();
-
-        // Setup buttons
         setupButtons();
+
+
+    }
+    private void pickVideoFromGallery() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("video/*");
+        startActivityForResult(intent, REQ_PICK_VIDEO);
+    }
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_PICK_VIDEO && resultCode == RESULT_OK && data != null) {
+            Uri uri = data.getData();
+            if (uri != null) {
+                // persist permission for future access
+                getContentResolver().takePersistableUriPermission(
+                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                originalVideoUri = uri;
+                editedVideoUri   = uri;
+                setupVideoPreview();
+                statusText.setText("Loaded video from gallery");
+            }
+        }
     }
 
+    /* ------------------- Video preview & controller ----------------------------- */
+
     private void setupVideoPreview() {
-        videoPreview.setVideoURI(videoUri);
+        MediaController mc = new MediaController(this);
+        mc.setAnchorView(videoPreview);
+        videoPreview.setMediaController(mc);
+
+        videoPreview.setVideoURI(originalVideoUri);
         videoPreview.setOnPreparedListener(mp -> {
             mp.setLooping(true);
-        });
-        videoPreview.setOnCompletionListener(mp -> {
-            isPlaying = false;
-            playPauseButton.setText("Play");
+            timelineSeek.setMax(videoPreview.getDuration());
+            startTimelineUpdater();
         });
         videoPreview.start();
         isPlaying = true;
         playPauseButton.setText("Pause");
     }
 
-    private void setupSeekBars() {
-        // FPS seek bar
-        fpsSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int fps = Math.max(1, progress); // Ensure at least 1 FPS
-                fpsValueText.setText(fps + " FPS");
+    /* Update timeline every 500 ms while playing */
+    private void startTimelineUpdater() {
+        ui.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (videoPreview != null && isPlaying) {
+                    timelineSeek.setProgress(videoPreview.getCurrentPosition());
+                    ui.postDelayed(this, 500);
+                }
             }
+        }, 500);
+    }
 
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
+    private void setupTimelineSeek() {
+        timelineSeek = findViewById(R.id.seekbar_timeline);
+        timelineSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar s,int p,boolean f){}
+            @Override public void onStartTrackingTouch(SeekBar s) {}
+            @Override public void onStopTrackingTouch(SeekBar s) {
+                if (videoPreview != null) videoPreview.seekTo(s.getProgress());
             }
         });
+    }
 
-        // Smoothness seek bar
+    /* ------------------- Seek bars & buttons (mostly unchanged) ------------------ */
+
+    private void bindViews() {
+        videoPreview          = findViewById(R.id.video_preview);
+        playPauseButton       = findViewById(R.id.btn_play_pause);
+        resetButton           = findViewById(R.id.btn_reset);
+        applyFpsButton        = findViewById(R.id.btn_apply_fps);
+        applyInterpolationButton = findViewById(R.id.btn_apply_interpolation);
+        applyAdjustmentsButton   = findViewById(R.id.btn_apply_adjustments);
+        saveButton            = findViewById(R.id.btn_save);
+        exportButton          = findViewById(R.id.btn_export);
+
+        fpsSeekBar     = findViewById(R.id.seekbar_fps);
+        smoothnessSeekBar  = findViewById(R.id.seekbar_smoothness);
+        brightnessSeekBar  = findViewById(R.id.seekbar_brightness);
+        contrastSeekBar    = findViewById(R.id.seekbar_contrast);
+        saturationSeekBar  = findViewById(R.id.seekbar_saturation);
+
+        fpsValueText   = findViewById(R.id.text_fps_value);
+        smoothnessValueText = findViewById(R.id.text_smoothness_value);
+        statusText     = findViewById(R.id.text_status);
+
+        linearRadio    = findViewById(R.id.radio_linear);
+        opticalFlowRadio = findViewById(R.id.radio_optical_flow);
+        aiRadio        = findViewById(R.id.radio_ai);
+
+        progressBar    = findViewById(R.id.progress_bar);
+    }
+
+    private void setupSeekBars() {
+        fpsSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar s,int p,boolean f){ fpsValueText.setText(Math.max(1,p)+" FPS"); }
+            @Override public void onStartTrackingTouch(SeekBar s){}
+            @Override public void onStopTrackingTouch(SeekBar s){}
+        });
         smoothnessSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                smoothnessValueText.setText(progress + "%");
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-            }
+            @Override public void onProgressChanged(SeekBar s,int p,boolean f){ smoothnessValueText.setText(p+"%"); }
+            @Override public void onStartTrackingTouch(SeekBar s){}
+            @Override public void onStopTrackingTouch(SeekBar s){}
         });
     }
 
     private void setupButtons() {
-        // Play/Pause button
+        Button uploadButton = findViewById(R.id.btn_upload);
+        uploadButton.setOnClickListener(v -> pickVideoFromGallery());
+
         playPauseButton.setOnClickListener(v -> {
-            if (isPlaying) {
-                videoPreview.pause();
-                playPauseButton.setText("Play");
-            } else {
-                videoPreview.start();
-                playPauseButton.setText("Pause");
-            }
+            if (isPlaying) { videoPreview.pause(); playPauseButton.setText("Play"); }
+            else           { videoPreview.start(); playPauseButton.setText("Pause"); }
             isPlaying = !isPlaying;
         });
 
-        // Reset button
-        resetButton.setOnClickListener(v -> {
-            videoPreview.stopPlayback();
-            videoPreview.setVideoURI(videoUri);
-            videoPreview.start();
-            isPlaying = true;
-            playPauseButton.setText("Pause");
+        resetButton.setOnClickListener(v -> resetAll());
 
-            // Reset edited URI to original
-            editedVideoUri = videoUri;
+        applyFpsButton.setOnClickListener(v -> simulateEdit("Adjusting FPS…", "temp_fps.mp4"));
+        applyInterpolationButton.setOnClickListener(v -> simulateEdit("Applying interpolation…", "temp_interp.mp4"));
+        applyAdjustmentsButton.setOnClickListener(v -> simulateEdit("Applying color adjustments…", "temp_color.mp4"));
 
-            // Reset all seek bars
-            fpsSeekBar.setProgress(30);
-            smoothnessSeekBar.setProgress(50);
-            brightnessSeekBar.setProgress(50);
-            contrastSeekBar.setProgress(50);
-            saturationSeekBar.setProgress(50);
-
-            // Reset radio buttons
-            linearRadio.setChecked(true);
-
-            statusText.setText("Video reset to original");
+        saveButton.setOnClickListener(v -> simulateEdit("Saving…", "edited_final.mp4"));
+        exportButton.setOnClickListener(v -> {
+            Intent i = new Intent(this, VideoExportActivity.class);
+            i.putExtra("VIDEO_URI", editedVideoUri.toString());
+            startActivity(i);
         });
-
-        // Apply FPS button
-        applyFpsButton.setOnClickListener(v -> applyFrameRateChanges());
-
-        // Apply Interpolation button
-        applyInterpolationButton.setOnClickListener(v -> applyInterpolation());
-
-        // Apply Adjustments button
-        applyAdjustmentsButton.setOnClickListener(v -> applyAdjustments());
-
-        // Save button
-        saveButton.setOnClickListener(v -> saveChanges());
-
-        // Export button
-        exportButton.setOnClickListener(v -> exportVideo());
     }
 
-    private void applyFrameRateChanges() {
-        int targetFps = fpsSeekBar.getProgress();
+    /* ------------------- Simulate processing but COPY actual bytes ----------- */
 
-        // Show progress indicators
+    private void simulateEdit(String doing, String tempFileName) {
         progressBar.setVisibility(View.VISIBLE);
-        statusText.setText("Adjusting frame rate to " + targetFps + " FPS...");
+        statusText.setText(doing);
         disableButtons(true);
 
-        executorService.execute(() -> {
+        executor.submit(() -> {
             try {
-                // Simulate frame rate adjustment
-                simulateProcessing();
+                Thread.sleep(1500); // fake processing
 
-                // In a real app, you would adjust the frame rate using MediaCodec or FFmpeg
-                // This would involve decoding, modifying, and re-encoding the video
+                File outFile = new File(getExternalFilesDir(null), tempFileName);
+                copyUriToFile(originalVideoUri, outFile); // ← real bytes
+                editedVideoUri = Uri.fromFile(outFile);
 
-                // After processing, update the video preview
-                File outputFile = new File(getExternalFilesDir(null), "temp_fps_adjusted.mp4");
-                editedVideoUri = Uri.fromFile(outputFile);
-
-                runOnUiThread(() -> {
+                ui.post(() -> {
                     progressBar.setVisibility(View.GONE);
-                    statusText.setText("Frame rate adjusted to " + targetFps + " FPS");
+                    statusText.setText("Done ✓");
                     disableButtons(false);
-
-                    // Update video preview
                     updateVideoPreview();
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> {
+                ui.post(() -> {
                     progressBar.setVisibility(View.GONE);
-                    statusText.setText("Error: " + e.getMessage());
+                    statusText.setText("Error: "+e.getMessage());
                     disableButtons(false);
                 });
             }
         });
     }
 
-    private void applyInterpolation() {
-        String interpolationType;
-        if (linearRadio.isChecked()) {
-            interpolationType = "Linear";
-        } else if (opticalFlowRadio.isChecked()) {
-            interpolationType = "Optical Flow";
-        } else {
-            interpolationType = "AI-Enhanced";
+    /* ------------------- Utils ------------------------------------------------ */
+
+    private void copyUriToFile(Uri src, File dest) throws Exception {
+        try (InputStream in = openStreamFromUri(src);
+             OutputStream out = new FileOutputStream(dest)) {
+            byte[] buf = new byte[8192]; int len;
+            while ((len = in.read(buf))!=-1) out.write(buf,0,len);
         }
-
-        int smoothness = smoothnessSeekBar.getProgress();
-
-        // Show progress indicators
-        progressBar.setVisibility(View.VISIBLE);
-        statusText.setText("Applying " + interpolationType + " interpolation...");
-        disableButtons(true);
-
-        executorService.execute(() -> {
-            try {
-                // Simulate interpolation processing
-                simulateProcessing();
-
-                // In a real app, you would apply frame interpolation using a library
-                // like FFmpeg with appropriate filters or a custom implementation
-
-                // After processing, update the video preview
-                File outputFile = new File(getExternalFilesDir(null), "temp_interpolated.mp4");
-                editedVideoUri = Uri.fromFile(outputFile);
-
-                runOnUiThread(() -> {
-                    progressBar.setVisibility(View.GONE);
-                    statusText.setText(interpolationType + " interpolation applied with " + smoothness + "% smoothness");
-                    disableButtons(false);
-
-                    // Update video preview
-                    updateVideoPreview();
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    progressBar.setVisibility(View.GONE);
-                    statusText.setText("Error: " + e.getMessage());
-                    disableButtons(false);
-                });
-            }
-        });
     }
-
-    private void applyAdjustments() {
-        int brightness = brightnessSeekBar.getProgress() - 50; // -50 to +50
-        int contrast = contrastSeekBar.getProgress() - 50;     // -50 to +50
-        int saturation = saturationSeekBar.getProgress() - 50; // -50 to +50
-
-        // Show progress indicators
-        progressBar.setVisibility(View.VISIBLE);
-        statusText.setText("Applying color adjustments...");
-        disableButtons(true);
-
-        executorService.execute(() -> {
-            try {
-                // Simulate adjustment processing
-                simulateProcessing();
-
-                // In a real app, you would apply color adjustments using MediaEffects
-                // or a video processing library like FFmpeg with appropriate filters
-
-                // After processing, update the video preview
-                File outputFile = new File(getExternalFilesDir(null), "temp_adjusted.mp4");
-                editedVideoUri = Uri.fromFile(outputFile);
-
-                runOnUiThread(() -> {
-                    progressBar.setVisibility(View.GONE);
-                    statusText.setText("Color adjustments applied");
-                    disableButtons(false);
-
-                    // Update video preview
-                    updateVideoPreview();
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    progressBar.setVisibility(View.GONE);
-                    statusText.setText("Error: " + e.getMessage());
-                    disableButtons(false);
-                });
-            }
-        });
-    }
-
-    private void saveChanges() {
-        // Show progress indicators
-        progressBar.setVisibility(View.VISIBLE);
-        statusText.setText("Saving changes...");
-        disableButtons(true);
-
-        executorService.execute(() -> {
-            try {
-                // Simulate saving process
-                simulateProcessing();
-
-                // In a real app, you would finalize all changes and save the video
-                // to a more permanent location
-                File outputFile = new File(getExternalFilesDir(null), "edited_video.mp4");
-                editedVideoUri = Uri.fromFile(outputFile);
-
-                runOnUiThread(() -> {
-                    progressBar.setVisibility(View.GONE);
-                    statusText.setText("Changes saved successfully");
-                    disableButtons(false);
-
-                    // Show toast
-                    Toast.makeText(VideoEditingActivity.this,
-                            "Video edited successfully",
-                            Toast.LENGTH_SHORT).show();
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    progressBar.setVisibility(View.GONE);
-                    statusText.setText("Error: " + e.getMessage());
-                    disableButtons(false);
-                });
-            }
-        });
-    }
-
-    private void exportVideo() {
-        // Launch the export activity with the edited video URI
-        Intent intent = new Intent(this, VideoExportActivity.class);
-        intent.putExtra("VIDEO_URI", editedVideoUri.toString());
-        startActivity(intent);
+    private InputStream openStreamFromUri(Uri uri) throws Exception {
+        if ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme()))
+            return new URL(uri.toString()).openStream();
+        return getContentResolver().openInputStream(uri);
     }
 
     private void updateVideoPreview() {
-        int currentPosition = 0;
-        if (videoPreview.isPlaying()) {
-            currentPosition = videoPreview.getCurrentPosition();
-            videoPreview.stopPlayback();
-        }
-
+        int pos = videoPreview.getCurrentPosition();
         videoPreview.setVideoURI(editedVideoUri);
-        videoPreview.seekTo(currentPosition);
-
-        if (isPlaying) {
-            videoPreview.start();
-        }
+        videoPreview.seekTo(pos);
+        if (isPlaying) videoPreview.start();
     }
 
-    private void simulateProcessing() throws InterruptedException {
-        // Simulate video processing
-        for (int i = 0; i <= 100; i += 5) {
-            final int progress = i;
-            runOnUiThread(() -> progressBar.setProgress(progress));
-            Thread.sleep(100); // Simulating work being done
-        }
+    private void resetAll() {
+        videoPreview.stopPlayback();
+        editedVideoUri = originalVideoUri;
+        setupVideoPreview();
+        statusText.setText("Reset");
+        fpsSeekBar.setProgress(30);
+        smoothnessSeekBar.setProgress(50);
+        brightnessSeekBar.setProgress(50);
+        contrastSeekBar.setProgress(50);
+        saturationSeekBar.setProgress(50);
+        linearRadio.setChecked(true);
     }
 
-    private void disableButtons(boolean disable) {
-        applyFpsButton.setEnabled(!disable);
-        applyInterpolationButton.setEnabled(!disable);
-        applyAdjustmentsButton.setEnabled(!disable);
-        saveButton.setEnabled(!disable);
-        exportButton.setEnabled(!disable);
+    private void disableButtons(boolean d) {
+        applyFpsButton.setEnabled(!d);
+        applyInterpolationButton.setEnabled(!d);
+        applyAdjustmentsButton.setEnabled(!d);
+        saveButton.setEnabled(!d);
+        exportButton.setEnabled(!d);
     }
+    private void toast(String t){ Toast.makeText(this,t,Toast.LENGTH_SHORT).show(); }
 
-    @Override
-    protected void onPause() {
-        super.onPause();
-        if (videoPreview != null && videoPreview.isPlaying()) {
-            videoPreview.pause();
-            isPlaying = false;
-            playPauseButton.setText("Play");
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
+    @Override protected void onDestroy() {
         super.onDestroy();
-        if (executorService != null) {
-            executorService.shutdown();
-        }
+        executor.shutdownNow();
+
     }
 }

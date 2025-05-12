@@ -50,6 +50,7 @@ dependencies {
     implementation(libs.credentials)
     implementation(libs.credentials.play.services.auth)
     implementation(libs.googleid)
+    implementation(libs.media3.session)
     testImplementation(libs.junit)
     implementation(libs.picasso)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
@@ -63,6 +64,4 @@ dependencies {
     implementation(libs.logging.interceptor)
     implementation(libs.glide)
     annotationProcessor(libs.compiler)
-
-
 }
